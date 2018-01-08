@@ -16,13 +16,14 @@ class Crawler:
     
     @staticmethod
     def getSchool():
+        schlist = []
         for url in WebConf.DATA5U:
             headers = { "User-Agent": UserAgent.getUA() }
             try:
                 r = rq.get( url, headers = headers )
                 if r.status_code == 200:
                     html = r.content.decode( 'utf-8' )
-                    ips.extend( Data5UParser.parseDocument( html ) )
+                    schlist.extend( GKCHSIParser.parseDocument( html ) )
             except:
                 pass
-            time.sleep( 0.5 )
+            time.sleep( 0.6 )
