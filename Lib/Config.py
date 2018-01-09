@@ -9,7 +9,7 @@ import random
 
 class WebConf:
 
-    GKCHSI   = [ 'http://gaokao.chsi.com.cn/sch/search--ss-on,option-qg,searchType-1.dhtml' ]
+    GKCHSI   = 'http://gaokao.chsi.com.cn/sch/search--ss-on,option-qg,searchType-1.dhtml'
             
 class DBConf:
     
