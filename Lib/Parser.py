@@ -40,6 +40,9 @@ class GKCHSIParser:
                         if itemSchool:
                             item['url'] = 'http://gaokao.chsi.com.cn' + itemSchool[0][0]
                             item['name'] = itemSchool[0][2]
+                        else:
+                            item['url'] = ''
+                            item['name'] = re.findall( r'<td align="left">(.*?)</td>', td, re.I | re.M | re.S )[0].replace('\r','').replace('\t','').strip()
                         
                         item985 = '<span class="a211985 span985">985</span>'
                         item211 = '<span class="a211985 span211">211</span>'

@@ -8,4 +8,4 @@
 from Lib.CrawlerWrapper import Crawler
 
 if __name__ == '__main__':
-    schlst = Crawler.getSchool()
+    Crawler.getSchool( 'school.txt' )

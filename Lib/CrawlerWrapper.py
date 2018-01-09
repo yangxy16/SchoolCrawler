@@ -16,7 +16,7 @@ import json
 class Crawler:
     
     @staticmethod
-    def getSchool():
+    def getSchool( filepath ):
         schlist = []
         def getPage( schlist, url, proxies ):
             headers = { "User-Agent": UserAgent.getUA() }
@@ -26,20 +26,21 @@ class Crawler:
                     html = r.content.decode( 'utf-8' )
                     url, schs = GKCHSIParser.parseDocument( html )
                     schlist.extend( schs )
-                    return url
+                    return True, url
             except:
                 pass
-            return None
+            return False, url
         
         url = WebConf.GKCHSI
         while True:
             proxies = None
-            url = getPage( schlist, url, proxies )
-            time.sleep( 1 )
+            ret, url = getPage( schlist, url, proxies )
+            if ret:
+                time.sleep( 1 )
             if not url:
                 break
                 
-        with open( "school.txt", 'wb' ) as f:
+        with open( filepath, 'wb' ) as f:
             for item in schlist:
                 f.write( json.dumps( item, ensure_ascii = False ).encode( 'utf-8' ) )
                 f.write( '\r\n'.encode( 'utf-8' ) )
