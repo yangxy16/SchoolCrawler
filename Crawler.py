@@ -8,4 +8,5 @@
 from Lib.CrawlerWrapper import Crawler
 
 if __name__ == '__main__':
-    Crawler.getSchool( 'school.txt' )
+    #Crawler.getSchool( 'school.txt' )
+    Crawler.getMajor( 'school.txt', 'major.txt' )

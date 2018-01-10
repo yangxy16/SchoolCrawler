@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 class GKCHSIParser:
 
     @staticmethod
-    def parseDocument( htmlDoc ):
+    def parseSchool( htmlDoc ):
         html = htmlDoc
         tblFlag = '<table width="100%" border="0" align="center" cellpadding="3" cellspacing="1" bgcolor="#E1E1E1" style="margin:0px auto;">'
         nPos = html.find( tblFlag )
@@ -96,3 +96,69 @@ class GKCHSIParser:
                 break
         
         return itemUrl, dataList
+        
+    @staticmethod
+    def parseMajor( htmlDoc ):
+        bsObj = BeautifulSoup( htmlDoc, 'lxml' )
+        itemData = { 'lishu' : '', 'addr' : '', 'address' : '', 'tel' : '', 'srcurl' : '', 'teshu' : [] }
+        for div in bsObj.find_all( 'div', class_ = 'r_c_sch_attr_1' ):
+            div = str( div ).replace('\r\n','').replace('\n', '').replace('\r\t', '').replace('\t', '').strip()
+            nPos = div.find( '院校隶属' )
+            if nPos != -1:
+                doc = div[ nPos + 1 : ]
+                item = re.findall( r'>(.*?)</div>', doc, re.I | re.M | re.S )
+                if item:
+                    itemData['lishu'] = item[0]
+            
+            nPos = div.find( '所在' )
+            if nPos != -1:
+                nPos = div.find( '地', nPos + 1 )
+                if nPos != -1:
+                    doc = div[ nPos + 1 : ]
+                    item = re.findall( r'>(.*?)</div>', doc, re.I | re.M | re.S )
+                    if item:
+                        itemData['addr'] = item[0]
+                
+            nPos = div.find( '通讯地址' )
+            if nPos != -1:
+                doc = div[ nPos + 1 : ]
+                item = re.findall( r'>(.*?)</div>', doc, re.I | re.M | re.S )
+                if item:
+                    itemData['address'] = item[0]
+                
+            nPos = div.find( '联系电话' )
+            if nPos != -1:
+                doc = div[ nPos + 1 : ]
+                item = re.findall( r'>(.*?)</div>', doc, re.I | re.M | re.S )
+                if item:
+                    itemData['tel'] = item[0]
+                
+            nPos = div.find( '学校网址' )
+            if nPos != -1:
+                doc = div[ nPos + 1 : ]
+                nPos = doc.find( 'href=' )
+                if nPos != -1:
+                    nEndPos = doc.find( ' ', nPos + 1 )
+                    if nEndPos != -1:
+                        itemData['srcurl'] = doc[nPos + 5: nEndPos + 1]
+                    else:
+                        nEndPos = doc.find( '>', nPos + 1 )
+                        if nEndPos != -1:
+                            itemData['srcurl'] = doc[nPos + 5: nEndPos + 1]
+                        else:
+                            nEndPos = doc.find( 'target', nPos + 1 )
+                            if nEndPos != -1:
+                                itemData['srcurl'] = doc[nPos + 5: nEndPos + 1]
+                    if itemData['srcurl'] and len( itemData['srcurl'] ) > 0:
+                        itemData['srcurl'] = itemData['srcurl'].replace( '"', '' )
+                
+            nPos = div.find( '特殊招生' )
+            if nPos != -1:
+                doc = div[ nPos + 1 : ]
+                item = re.findall( r'>(.*?)</div>', doc, re.I | re.M | re.S )
+                if item:
+                    item = item[0].replace( '\r\n', '' ).replace( '&nbsp;', '' ).split( '\xa0' )
+                    for obj in item:
+                        if obj and len( obj ) > 0:
+                            itemData['teshu'].append( obj )
+        return itemData
