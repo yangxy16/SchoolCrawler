@@ -2,6 +2,8 @@ import requests as rq
 from bs4 import BeautifulSoup
 import random
 import re
+import json
+import time
 
 def getUA():
     return random.choice( [
@@ -43,62 +45,262 @@ def getUA():
     ])
     
 def downFile( url, savePath ):
-    r = rq.get( url, stream = True )
-    content_size = int( r.headers['content-length'] )
-    with open( savePath, "wb") as f:
-       for data in r.iter_content( chunk_size = 1024 ):
-           f.write(data)
-    r.close()
-
-for i in range( 1 ):
-    r = rq.get( 'http://www.gaokaopai.com/daxue-jianjie-{}.html'.format( i + 1 ), headers = { "User-Agent": getUA() }, proxies = None )
-    if r.status_code == 200:
-        html = r.content.decode( 'utf-8' )
-        
-        #获取导航栏内容
-        navList = []
-        bsObj = BeautifulSoup( html, 'lxml' )
-        for div in bsObj.find_all( 'div', { 'id' : 'locationNav' } ):
-            for subDiv in div.findAll( 'div', class_ = 'inner' ):
-                for href in subDiv.findAll( 'a' ):
-                    navList.append( str( href ) )
-        navList = navList[ 2 : 4 ]
+    headers = { "User-Agent": getUA() }
+    for i in range( 10 ):
         try:
-            navList[0] = re.findall( r'>(.*?)的大学</a>', navList[0], re.I | re.M | re.S )[0]      #地区
-            navList[1] = re.findall( r'>(.*?)</a>', navList[1], re.I | re.M | re.S )[0]            #大学名称
+            r = rq.get( url, headers = headers, stream = True )
+            content_size = int( r.headers['content-length'] )
+            with open( savePath, "wb") as f:
+               for data in r.iter_content( chunk_size = 4096 ):
+                   f.write(data)
+            r.close()
+            break
         except:
-            time.sleep( 0.5 )
-            continue    #错误的页面
+            continue
+        finally:
+            r.close()
         
-        schImg = ''
-        #获取学校ICON
-        for div in bsObj.find_all( 'div', class_ = 'schoolLogo' ):
-            for img in div.findAll( 'img' ):
-                schImg = img.attrs['src']
+f = open( './sch.txt', 'w', encoding = 'utf-8' )
+
+for schId in range( 4000 ):
+    schoolInfo = {}
+    
+    for i in range( 10 ):  
+        print( "正在抓取：" + str( schId + 1 ), i )
+        try:
+            time.sleep( random.randint( 1, 3 ) )
+            headers = { "User-Agent": getUA() }
+            r = rq.get( 'http://www.gaokaopai.com/daxue-jianjie-{}.html'.format( schId + 1 ), headers = headers, proxies = None )
+            
+            if r.status_code == 200:
+    
+                schoolInfo['schoolId'] = schId + 1
+            
+                html = r.content.decode( 'utf-8' )
+                html = html.replace( u'\u3000', u'' ).replace( u'\xa0', u'' ).replace( '\xa0', '' )
+
+                #获取导航栏内容
+                navList = []
+                bsObj = BeautifulSoup( html, 'lxml' )
+                for div in bsObj.find_all( 'div', { 'id' : 'locationNav' } ):
+                    for subDiv in div.findAll( 'div', class_ = 'inner' ):
+                        for href in subDiv.findAll( 'a' ):
+                            navList.append( str( href ) )
+                navList = navList[ 2 : 4 ]
+                try:
+                    navList[0] = re.findall( r'>(.*?)的大学</a>', navList[0], re.I | re.M | re.S )[0]      #地区
+                    navList[1] = re.findall( r'>(.*?)</a>', navList[1], re.I | re.M | re.S )[0]            #大学名称
+                    
+                    schoolInfo['area'] = navList[0]
+                    schoolInfo['name'] = navList[1]
+                except:
+                    #raise SystemExit( "错误的页面" )
+                    continue    #错误的页面
+
+                schImg = ''
+                schoolInfo['logo'] = ''
+                schoolInfo['logoUrl'] = ''
+                #获取学校ICON
+                for div in bsObj.find_all( 'div', class_ = 'schoolLogo' ):
+                    for img in div.findAll( 'img' ):
+                        schImg = img.attrs['src']
+                        schoolInfo['logoUrl'] = schImg
+                        break
+                if len( schImg ) > 1:
+                    saveName = schImg.replace( 'http://cdn.stc.gaokaopai.com/Public/Uploads/', '' )
+                    downFile( schImg, './logo/' + saveName )
+                    schoolInfo['logo'] = saveName
+
+                #专业URL
+                urlZY = 'http://www.gaokaopai.com/daxue-zhuanye-{}.html'.format( schId + 1 )
+                
+                #简介
+                schIntro = ''
+                try:
+                    for div in bsObj.find_all( 'div', class_ = 'intro' ):
+                        schIntro = re.findall( r'>(.*)</div>', str( div ), re.I | re.M | re.S )[0].replace( '\r\n', '' ).replace( '\n', '' ).replace( '<br/>', '\r\n' )
+                except:
+                    pass
+                schoolInfo['intro'] = schIntro
+                
+                #创建时间、隶属于、学生人数、院士人数、重点学科、学校类型、博士点个数、硕士点个数
+                itemAttrList = []
+                for div in bsObj.find_all( 'div', class_ = 'baseInfo clearfix' ):
+                    for ul in div.findAll( 'ul', class_ = 'baseInfo_left' ):
+                        for li in ul.findAll( 'li', class_ = 'biItem' ):
+                            title = re.findall( r'<span class="t">(.*?)</span>', str( li ), re.I | re.M | re.S )[0]
+                            desp = re.findall( r'<div class="c">(.*?)</div>', str( li ), re.I | re.M | re.S )[0]
+                            itemAttrList.append( ( title, desp ) )
+                    for ul in div.findAll( 'ul', class_ = 'baseInfo_right' ):
+                        for li in ul.findAll( 'li', class_ = 'biItem' ):
+                            title = re.findall( r'<span class="t">(.*?)</span>', str( li ), re.I | re.M | re.S )[0]
+                            desp = re.findall( r'<div class="c">(.*?)</div>', str( li ), re.I | re.M | re.S )[0]
+                            itemAttrList.append( ( title, desp ) )
+                
+                schoolInfo['createtime'] = ''
+                schoolInfo['belongs'] = ''
+                schoolInfo['studentCount'] = ''
+                schoolInfo['academicianCount'] = ''
+                schoolInfo['keySubjectsCount'] = ''
+                schoolInfo['schoolType'] = ''
+                schoolInfo['doctorStationCount'] = ''
+                schoolInfo['masterStationCount'] = ''
+                    
+                try:            
+                    schoolInfo['createtime'] = itemAttrList[0][1]
+                    schoolInfo['belongs'] = itemAttrList[1][1]
+                    schoolInfo['studentCount'] = itemAttrList[2][1]
+                    schoolInfo['academicianCount'] = itemAttrList[3][1]
+                    schoolInfo['keySubjectsCount'] = itemAttrList[4][1]
+                    schoolInfo['schoolType'] = itemAttrList[5][1]
+                    schoolInfo['doctorStationCount'] = itemAttrList[6][1]
+                    schoolInfo['masterStationCount'] = itemAttrList[7][1]
+                except:
+                    pass
+                    
+                #就业情况、
+                schJobState = ''
+                strFlag = '<div class="catTitle">'
+                flagLength = len( strFlag )
+                strFlagEnd = '</div>'
+                nPos = 0
+                
+                schoolInfo['jobState'] = ''
+                nPos = html.find( strFlag, nPos )
+                if nPos != -1:
+                    nEndPos = html.find( strFlagEnd, nPos + flagLength )
+                    if nEndPos != -1:
+                        doc = html[ nPos + flagLength : nEndPos + 1 ]
+                        if doc.find( '就业情况' ) != -1:
+                            nSubPos = html.find( '<div class="txt"', nEndPos + 1 )
+                            if nSubPos != -1:
+                                nEndSubPos = html.find( strFlagEnd, nSubPos + 1 )
+                                if nEndSubPos != -1:
+                                    doc = html[ nSubPos : nEndSubPos + len( strFlagEnd ) + 1 ]
+                                    if doc and len( doc ) > 1:
+                                        schJobState = re.findall( r'>(.*)</div>', doc, re.I | re.M | re.S )[0].replace('\r\n', '').replace('\n', '').strip()
+                                        schoolInfo['jobState'] = schJobState
+                #学生来源
+                schStuArea = {}
+                if nPos != -1:
+                    nPos = html.find( strFlag, nPos + flagLength + 1 )
+                    if nPos != -1:
+                        nEndPos = html.find( strFlagEnd, nPos + flagLength )
+                        if nEndPos != -1:
+                            doc = html[ nPos + flagLength : nEndPos + 1 ]
+                            if doc.find( '来源' ) != -1:
+                                nSubPos = html.find( 'series:', nEndPos + 1 )
+                                if nSubPos != -1:
+                                    nEndSubPos = html.find( '}]', nSubPos + 1 )
+                                    if nEndSubPos != -1:
+                                        nSubSubPos = html.find( 'data:', nSubPos + 1 )
+                                        if nSubSubPos != -1:
+                                            doc = html[ nSubSubPos : nEndSubPos + 3 ]
+                                            p = re.findall( '\[(.*?),(.*?)\]', doc, re.I | re.M | re.S )
+                                            for s in p:
+                                                schStuArea[ s[0].replace( '[', '' ).replace( ']', '' ).replace( '\"', '' ) ] = s[1]
+                                                
+                schoolInfo['studentFrom'] = schStuArea
+                                                
+                #男女比例
+                try:
+                    schStuBoys = re.findall( r'<div class="m"><div class="tip">男生<br />(.*?)</div></div>', html, re.I | re.M | re.S )[0]
+                    schStuGirls = re.findall( r'<div class="f"><div class="tip">女生<br />(.*?)</div></div>', html, re.I | re.M | re.S )[0]
+                except:
+                    schStuBoys = '50'
+                    schStuGirls = '50'
+                
+                schoolInfo['studentSex'] = { 'boys' : schStuBoys.replace('%', ''), 'girls' : schStuGirls.replace('%', '') }
+
+                #特色专业、重点专业（国家重点、校级优势）
+                schSpecialty = []
+                schSpecialCounty = []
+                schSpecialSelf = []
+                
+                for div in bsObj.find_all( 'div', class_ = 'modContent' ):
+                    for subDiv in div.findAll( 'div', class_ = 'box txt' ):
+                        strSubDiv = str( subDiv ).replace( '\t', '' ).replace( '\r\n' ,'' ).replace( '\n', '' ).strip()
+                        if strSubDiv.find( 'style="display:block"' ) != -1:
+                            p = re.findall( '<h3>(.*?)</h3>', strSubDiv, re.I | re.M | re.S )
+                            for s in p:
+                                schSpecialty.append( s )
+                        else:
+                            index = 0
+                            for ul in subDiv.findAll( 'ul', class_ = 'list clearfix' ):
+                                if index == 0:
+                                    for li in ul.findAll( 'li' ):
+                                        p = re.findall( '>(.*?)</a>', str( li )[5:], re.I | re.M | re.S )[0]
+                                        schSpecialCounty.append( p )
+                                    index = 1
+                                else:
+                                    for li in ul.findAll( 'li' ):
+                                        p = re.findall( '>(.*?)</a>', str( li )[5:], re.I | re.M | re.S )[0]
+                                        schSpecialSelf.append( p )
+                                        
+                schoolInfo['schoolSpecialty'] = schSpecialty
+                schoolInfo['schoolSpecialCounty'] = schSpecialCounty
+                schoolInfo['schoolSpecialSelf'] = schSpecialSelf
+
+                #学费信息
+                schMoney = ''
+                if nPos != -1:
+                    nPos = html.find( strFlag, nPos + flagLength + 1 )
+                    if nPos != -1:
+                        nEndPos = html.find( strFlagEnd, nPos + flagLength )
+                        if nEndPos != -1:
+                            doc = html[ nPos + flagLength : nEndPos + 1 ]
+                            if doc.find( '学费信息' ) != -1:
+                                nSubPos = html.find( '<div class="txt"', nEndPos + 1 )
+                                if nSubPos != -1:
+                                    nEndSubPos = html.find( strFlagEnd, nSubPos + 1 )
+                                    if nEndSubPos != -1:
+                                        doc = html[ nSubPos : nEndSubPos + len( strFlagEnd ) + 1 ]
+                                        if doc and len( doc ) > 1:
+                                            schMoney = re.findall( r'>(.*)</div>', doc, re.I | re.M | re.S )[0].replace('\r\n', '').replace('\n', '').replace('<br>', '').replace('<br />', '').replace('<br/>', '').strip()
+                                            
+                schoolInfo['schoolCoast'] = schMoney
+                
+                #学校地址、电话信息
+                schLinkInfo = []
+                for div in bsObj.find_all( 'div', class_ = 'infos' ):
+                    for ul in div.findAll( 'ul' ):
+                        for li in ul.findAll( 'li' ):
+                            li = str( li ).replace( '\t', '' ).replace( '\r\n', '' ).replace( '\n', '' ).strip()
+                            p = re.findall( r'<li><label>(.*?)</label>(.*?)</li>', li, re.I | re.M | re.S )
+                            schLinkInfo.append( ( p[0][0].strip().replace( '：', '' ), p[0][1].strip() ) )
+                            
+                schoolInfo['schoolCity'] = ''
+                schoolInfo['schoolAddr'] = ''
+                schoolInfo['schoolTelphone'] = ''
+                schoolInfo['schoolEmail'] = ''
+                
+                try:
+                    schoolInfo['schoolCity'] = schLinkInfo[0][1]
+                    schoolInfo['schoolAddr'] = schLinkInfo[1][1]
+                    schoolInfo['schoolTelphone'] = schLinkInfo[2][1]
+                    schoolInfo['schoolEmail'] = schLinkInfo[3][1]
+                except:
+                    pass
+                
+                #网址信息
+                schHref = []
+                for div in bsObj.find_all( 'div', class_ = 'website' ):
+                    for a in div.findAll( 'a' ):
+                        schHref.append( a.attrs['href'].strip() )
+                        
+                schoolInfo['schoolHomeUrl'] = ''
+                schoolInfo['schoolEnrolUrl'] = ''
+                
+                try:
+                    schoolInfo['schoolHomeUrl'] = schHref[0]
+                    schoolInfo['schoolEnrolUrl'] = schHref[1]
+                except:
+                    pass
+                
+                print( schoolInfo )
+                f.write( json.dumps( schoolInfo, ensure_ascii = False ) + '\r\n' )
                 break
-        if len( schImg ) > 1:
-            savePath = schImg.replace( 'http://cdn.stc.gaokaopai.com/Public/Uploads/', '' )
-            #downFile( schImg, savePath )
-            
-        #专业URL
-        urlZY = 'http://www.gaokaopai.com/daxue-zhuanye-{}.html'.format( i + 1 )
-        
-        #简介
-        schIntro = ''
-        for div in bsObj.find_all( 'div', class_ = 'intro' ):
-            schIntro = re.findall( r'>(.*)</div>', str( div ), re.I | re.M | re.S )[0].replace( '<br/>', '\r\n' )
-        
-        #创建时间、隶属于、学生人数、院士人数、重点学科、学校类型、博士点个数、硕士点个数
-        itemAttrList = []
-        for div in bsObj.find_all( 'div', class_ = 'baseInfo clearfix' ):
-            for ul in div.findAll( 'ul', class_ = 'baseInfo_left' ):
-                for li in ul.findAll( 'li', class_ = 'biItem' ):
-                    title = re.findall( r'<span class="t">(.*?)</span>', str( li ), re.I | re.M | re.S )[0]
-                    desp = re.findall( r'<div class="c">(.*?)</div>', str( li ), re.I | re.M | re.S )[0]
-                    itemAttrList.append( ( title, desp ) )
-            for ul in div.findAll( 'ul', class_ = 'baseInfo_right' ):
-                for li in ul.findAll( 'li', class_ = 'biItem' ):
-                    title = re.findall( r'<span class="t">(.*?)</span>', str( li ), re.I | re.M | re.S )[0]
-                    desp = re.findall( r'<div class="c">(.*?)</div>', str( li ), re.I | re.M | re.S )[0]
-                    itemAttrList.append( ( title, desp ) )
-            
+        except:
+            continue
+
+f.close()
