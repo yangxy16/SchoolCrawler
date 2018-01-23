@@ -103,9 +103,10 @@ while True:
                     
                     print( schoolInfo )
                     fw.write( json.dumps( schoolInfo, ensure_ascii = False ) + '\r\n' )
+                    fw.flush()
                     break
                     
             except:
                 continue
-
+fw.close()
 f.close()
